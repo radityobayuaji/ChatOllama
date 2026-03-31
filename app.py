@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from flask import Flask, render_template, request, jsonify
 import requests
 import json
@@ -71,3 +72,6 @@ if __name__ == '__main__':
     print('⚠️  Pastikan Ollama sudah running: ollama serve')
     print('='*60)
     app.run(debug=True, port=5000, host='0.0.0.0')
+=======
+from flask import Flask, request, jsonify\n\napp = Flask(__name__)\n\n@app.route('/chat', methods=['POST'])\ndef chat():\n    data = request.get_json()\n    message = data.get('message')\n\n    # Here, integrate with Ollama chat API using the message received\n    response = "Response from Ollama"  # Placeholder for the actual response\n\n    return jsonify({'response': response})\n\nif __name__ == '__main__':\n    app.run(debug=True)
+>>>>>>> 8b3cef43c8ab62b8450a6b94bf698056f9f37fb7
