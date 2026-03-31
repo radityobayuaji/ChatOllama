@@ -10,6 +10,7 @@ venv/
 
 # Chat history data (generated at runtime)
 data/chat_history.json
+data/chat_history.db
 
 # IDE
 .vscode/settings.json

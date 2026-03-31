@@ -1,9 +1,8 @@
 from flask import Flask, render_template, request, jsonify
 import requests
-import json
 import os
-import uuid
 from datetime import datetime
+import db
 
 app = Flask(__name__)
 
@@ -11,32 +10,11 @@ app = Flask(__name__)
 OLLAMA_API = 'http://localhost:11434/api/generate'
 MODEL = 'gemma3:12b'
 
-# Session history storage
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
-HISTORY_FILE = os.path.join(DATA_DIR, 'chat_history.json')
-MAX_SESSIONS = 50
-
 SNIPPET_LENGTH = 40
 active_sessions = {}
 
-
-def load_history():
-    """Load saved sessions from JSON file."""
-    if not os.path.exists(HISTORY_FILE):
-        return []
-    try:
-        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return []
-
-
-def save_history(sessions):
-    """Persist sessions to JSON file, keeping at most MAX_SESSIONS."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    sessions = sessions[-MAX_SESSIONS:]
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(sessions, f, indent=2, ensure_ascii=False)
+# Initialise SQLite DB (creates tables + migrates JSON if present)
+db.init_db()
 
 
 @app.route('/')
@@ -112,26 +90,16 @@ def chat():
 @app.route('/api/sessions', methods=['GET'])
 def get_sessions():
     """Return saved session summaries (newest first, no message bodies)."""
-    sessions = load_history()
-    summaries = []
-    for s in reversed(sessions):
-        summaries.append({
-            'id': s['id'],
-            'title': s['title'],
-            'created_at': s['created_at'],
-            'message_count': len(s.get('messages', []))
-        })
-    return jsonify(summaries)
+    return jsonify(db.get_sessions())
 
 
 @app.route('/api/sessions/<session_id>', methods=['GET'])
 def get_session(session_id):
     """Return full message list for a saved session."""
-    sessions = load_history()
-    for s in sessions:
-        if s['id'] == session_id:
-            return jsonify(s)
-    return jsonify({'error': 'Session not found'}), 404
+    session = db.get_session(session_id)
+    if session is None:
+        return jsonify({'error': 'Session not found'}), 404
+    return jsonify(session)
 
 
 @app.route('/api/sessions', methods=['POST'])
@@ -151,11 +119,7 @@ def save_session():
         del active_sessions[session_id]
         return jsonify({'message': 'Empty session not saved'})
 
-    sessions = load_history()
-    # Replace existing entry if the same session_id was saved before
-    sessions = [s for s in sessions if s['id'] != session_id]
-    sessions.append(session)
-    save_history(sessions)
+    db.save_session(session)
     del active_sessions[session_id]
 
     return jsonify({
