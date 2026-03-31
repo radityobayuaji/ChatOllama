@@ -1,8 +1,38 @@
 from flask import Flask, render_template, request, jsonify
 import requests
 import json
+import os
+from datetime import datetime
+import uuid
 
 app = Flask(__name__)
+
+# Path to chat history file
+DATA_DIR = 'data'
+CHAT_HISTORY_FILE = os.path.join(DATA_DIR, 'chat_history.json')
+MAX_SESSIONS = 50
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
+def load_sessions():
+    """Load sessions from JSON file"""
+    if not os.path.exists(CHAT_HISTORY_FILE):
+        return []
+    try:
+        with open(CHAT_HISTORY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_sessions(sessions):
+    """Save sessions to JSON file"""
+    # Keep only the last MAX_SESSIONS
+    if len(sessions) > MAX_SESSIONS:
+        sessions = sessions[-MAX_SESSIONS:]
+
+    with open(CHAT_HISTORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(sessions, f, ensure_ascii=False, indent=2)
 
 # Configuration untuk Ollama API
 OLLAMA_API = 'http://localhost:11434/api/generate'
@@ -59,6 +89,62 @@ def health():
             return jsonify({'status': 'error', 'message': 'Ollama tidak merespons'}), 500
     except:
         return jsonify({'status': 'error', 'message': 'Ollama tidak tersedia'}), 500
+
+@app.route('/api/sessions', methods=['GET'])
+def get_sessions():
+    """Get all chat sessions"""
+    try:
+        sessions = load_sessions()
+        return jsonify({'sessions': sessions})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sessions/<session_id>', methods=['GET'])
+def get_session(session_id):
+    """Get a specific session by ID"""
+    try:
+        sessions = load_sessions()
+        session = next((s for s in sessions if s['id'] == session_id), None)
+
+        if session:
+            return jsonify(session)
+        else:
+            return jsonify({'error': 'Session not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sessions', methods=['POST'])
+def save_session():
+    """Save a new chat session"""
+    try:
+        data = request.json
+        messages = data.get('messages', [])
+
+        if not messages:
+            return jsonify({'error': 'No messages to save'}), 400
+
+        # Generate session title from first user message
+        first_user_msg = next((msg['content'] for msg in messages if msg['role'] == 'user'), '')
+        title = first_user_msg[:50] + ('...' if len(first_user_msg) > 50 else '')
+
+        # Create new session
+        session = {
+            'id': str(uuid.uuid4()),
+            'title': title,
+            'timestamp': datetime.now().isoformat(),
+            'messages': messages
+        }
+
+        # Load existing sessions and add new one
+        sessions = load_sessions()
+        sessions.append(session)
+
+        # Save updated sessions
+        save_sessions(sessions)
+
+        return jsonify(session), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print('='*60)

@@ -7,16 +7,30 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div id="chat-container">
-        <div class="header">
-            <h1>💬 Chat Ollama</h1>
-            <p id="status">🟡 Checking...</p>
+    <div id="app-container">
+        <!-- Sidebar for chat history -->
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <h2>📚 History</h2>
+                <button id="new-chat-btn">➕ New Chat</button>
+            </div>
+            <div id="session-list">
+                <!-- Sessions will be loaded here -->
+            </div>
         </div>
-        <div id="chatWindow"></div>
-        <div class="input-group">
-            <input type="text" id="chatInput" placeholder="Ketik pesan...">
-            <button id="sendButton">Send</button>
-            <button id="clearButton">Clear</button>
+
+        <!-- Main chat container -->
+        <div id="chat-container">
+            <div class="header">
+                <h1>💬 Chat Ollama</h1>
+                <p id="status">🟡 Checking...</p>
+            </div>
+            <div id="chatWindow"></div>
+            <div class="input-group">
+                <input type="text" id="chatInput" placeholder="Ketik pesan...">
+                <button id="sendButton">Send</button>
+                <button id="clearButton">Clear</button>
+            </div>
         </div>
     </div>
 
@@ -26,17 +40,24 @@
         const chatWindow = document.getElementById('chatWindow');
         const clearButton = document.getElementById('clearButton');
         const statusDiv = document.getElementById('status');
+        const newChatBtn = document.getElementById('new-chat-btn');
+        const sessionList = document.getElementById('session-list');
+
+        // Session management
+        let currentMessages = [];
+        let currentSessionId = null;
 
         // Check Ollama health on load
         window.addEventListener('load', () => {
             checkOllamaHealth();
+            loadSessions();
         });
 
         async function checkOllamaHealth() {
             try {
                 const response = await fetch('/api/health');
                 const data = await response.json();
-                
+
                 if (data.status === 'ok') {
                     statusDiv.textContent = '🟢 Ollama Ready';
                     statusDiv.style.color = '#28a745';
@@ -49,6 +70,134 @@
                 statusDiv.style.color = '#dc3545';
             }
         }
+
+        // Load all sessions
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/sessions');
+                const data = await response.json();
+
+                displaySessions(data.sessions || []);
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
+
+        // Display sessions in sidebar
+        function displaySessions(sessions) {
+            sessionList.innerHTML = '';
+
+            if (sessions.length === 0) {
+                sessionList.innerHTML = '<p style="text-align: center; color: #999; padding: 20px; font-size: 12px;">No history yet</p>';
+                return;
+            }
+
+            // Sort sessions by timestamp (newest first)
+            sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            sessions.forEach(session => {
+                const item = document.createElement('div');
+                item.className = 'session-item';
+                if (session.id === currentSessionId) {
+                    item.classList.add('active');
+                }
+
+                const title = document.createElement('div');
+                title.className = 'session-title';
+                title.textContent = session.title || 'Untitled';
+
+                const time = document.createElement('div');
+                time.className = 'session-time';
+                time.textContent = formatDate(session.timestamp);
+
+                item.appendChild(title);
+                item.appendChild(time);
+
+                item.addEventListener('click', () => loadSession(session.id));
+
+                sessionList.appendChild(item);
+            });
+        }
+
+        // Format date/time
+        function formatDate(isoString) {
+            const date = new Date(isoString);
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            if (days < 7) return `${days}d ago`;
+
+            return date.toLocaleDateString();
+        }
+
+        // Load a specific session
+        async function loadSession(sessionId) {
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}`);
+                const session = await response.json();
+
+                if (response.ok) {
+                    currentSessionId = sessionId;
+                    currentMessages = session.messages || [];
+
+                    // Clear and reload chat window
+                    chatWindow.innerHTML = '';
+                    currentMessages.forEach(msg => {
+                        appendMessage(msg.content, msg.role);
+                    });
+
+                    // Update active session in sidebar
+                    loadSessions();
+                }
+            } catch (error) {
+                console.error('Error loading session:', error);
+            }
+        }
+
+        // Save current session
+        async function saveCurrentSession() {
+            if (currentMessages.length === 0) return;
+
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: currentMessages })
+                });
+
+                const session = await response.json();
+
+                if (response.ok) {
+                    currentSessionId = session.id;
+                    loadSessions();
+                }
+            } catch (error) {
+                console.error('Error saving session:', error);
+            }
+        }
+
+        // New chat button
+        newChatBtn.addEventListener('click', async () => {
+            // Save current session if it has messages
+            if (currentMessages.length > 0) {
+                await saveCurrentSession();
+            }
+
+            // Start new session
+            currentMessages = [];
+            currentSessionId = null;
+            chatWindow.innerHTML = '';
+            chatInput.focus();
+
+            // Reload sessions to update sidebar
+            loadSessions();
+        });
 
         // Send message event listeners
         sendButton.addEventListener('click', sendMessage);
@@ -63,8 +212,9 @@
             const message = chatInput.value.trim();
             if (!message) return;
 
-            // Add user message to UI
+            // Add user message to UI and messages array
             appendMessage(message, 'user');
+            currentMessages.push({ role: 'user', content: message });
             chatInput.value = '';
             chatInput.focus();
 
@@ -84,18 +234,26 @@
                 });
 
                 const data = await response.json();
-                
+
                 // Remove loading indicator
                 loadingDiv.remove();
 
                 if (response.ok) {
                     appendMessage(data.response, 'bot');
+                    currentMessages.push({ role: 'bot', content: data.response });
+
+                    // Auto-save session after each exchange
+                    await saveCurrentSession();
                 } else {
-                    appendMessage('❌ Error: ' + (data.error || 'Unknown error'), 'bot');
+                    const errorMsg = '❌ Error: ' + (data.error || 'Unknown error');
+                    appendMessage(errorMsg, 'bot');
+                    currentMessages.push({ role: 'bot', content: errorMsg });
                 }
             } catch (error) {
                 loadingDiv.remove();
-                appendMessage('❌ Connection error: ' + error.message, 'bot');
+                const errorMsg = '❌ Connection error: ' + error.message;
+                appendMessage(errorMsg, 'bot');
+                currentMessages.push({ role: 'bot', content: errorMsg });
             }
         }
 
@@ -116,6 +274,8 @@
         clearButton.addEventListener('click', () => {
             if (confirm('Clear all messages?')) {
                 chatWindow.innerHTML = '';
+                currentMessages = [];
+                currentSessionId = null;
             }
         });
     </script>
