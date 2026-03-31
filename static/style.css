@@ -14,12 +14,109 @@ body {
     padding: 20px;
 }
 
+.layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+    align-items: stretch;
+}
+
+.sidebar {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 600px;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sidebar h2 {
+    font-size: 18px;
+    color: #1f274f;
+}
+
+.eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8a8fb8;
+    margin-bottom: 2px;
+}
+
+.ghost {
+    background: transparent;
+    color: #667eea;
+    border: 1px solid rgba(102, 126, 234, 0.4);
+    padding: 10px 16px;
+}
+
+.ghost:hover {
+    background: rgba(102, 126, 234, 0.08);
+}
+
+.session-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 4px;
+}
+
+.session-item {
+    text-align: left;
+    background: white;
+    border: 1px solid #e8ebff;
+    color: #1f274f;
+    border-radius: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.session-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.12);
+    transform: translateY(-2px);
+}
+
+.session-title {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.session-meta {
+    font-size: 12px;
+    color: #6b6f82;
+}
+
+.empty {
+    color: #6b6f82;
+    font-size: 13px;
+    text-align: center;
+    padding: 12px;
+}
+
 #chat-container {
     background: white;
     border-radius: 12px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
     width: 100%;
-    max-width: 600px;
     display: flex;
     flex-direction: column;
     height: 600px;
@@ -184,18 +281,29 @@ button:active {
     transform: translateY(0);
 }
 
-#clearButton {
+.danger {
     background: #ff6b6b;
 }
 
-#clearButton:hover {
+.danger:hover {
     background: #ff5252;
 }
 
 @media (max-width: 600px) {
+    body {
+        padding: 10px;
+    }
+
+    .layout {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        height: auto;
+    }
+
     #chat-container {
-        height: 80vh;
-        max-width: 100%;
+        height: 75vh;
     }
     
     .bubble {
