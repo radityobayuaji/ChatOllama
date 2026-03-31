@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Chat history data (generated at runtime)
+data/chat_history.json
+
+# IDE
+.vscode/settings.json

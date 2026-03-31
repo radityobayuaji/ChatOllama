@@ -7,16 +7,30 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div id="chat-container">
-        <div class="header">
-            <h1>💬 Chat Ollama</h1>
-            <p id="status">🟡 Checking...</p>
+    <div id="app">
+        <!-- Sidebar: session history -->
+        <div id="sidebar">
+            <button id="newChatButton">+ New Chat</button>
+            <h2>History</h2>
+            <div id="sessionList">
+                <p class="no-history">No history yet.</p>
+            </div>
         </div>
-        <div id="chatWindow"></div>
-        <div class="input-group">
-            <input type="text" id="chatInput" placeholder="Ketik pesan...">
-            <button id="sendButton">Send</button>
-            <button id="clearButton">Clear</button>
+
+        <!-- Main chat area -->
+        <div id="main">
+            <div id="chat-container">
+                <div class="header">
+                    <h1>💬 Chat Ollama</h1>
+                    <p id="status">🟡 Checking...</p>
+                </div>
+                <div id="chatWindow"></div>
+                <div class="input-group">
+                    <input type="text" id="chatInput" placeholder="Ketik pesan...">
+                    <button id="sendButton">Send</button>
+                    <button id="clearButton">Clear</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -26,17 +40,29 @@
         const chatWindow = document.getElementById('chatWindow');
         const clearButton = document.getElementById('clearButton');
         const statusDiv = document.getElementById('status');
+        const newChatButton = document.getElementById('newChatButton');
+        const sessionList = document.getElementById('sessionList');
 
-        // Check Ollama health on load
+        // Current session ID (UUID generated per session)
+        let currentSessionId = generateUUID();
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.floor(Math.random() * 16);
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        }
+
+        // Check Ollama health and load session history on page load
         window.addEventListener('load', () => {
             checkOllamaHealth();
+            loadSessionHistory();
         });
 
         async function checkOllamaHealth() {
             try {
                 const response = await fetch('/api/health');
                 const data = await response.json();
-                
                 if (data.status === 'ok') {
                     statusDiv.textContent = '🟢 Ollama Ready';
                     statusDiv.style.color = '#28a745';
@@ -49,6 +75,85 @@
                 statusDiv.style.color = '#dc3545';
             }
         }
+
+        async function loadSessionHistory() {
+            try {
+                const response = await fetch('/api/sessions');
+                const sessions = await response.json();
+                renderSessionList(sessions);
+            } catch (error) {
+                console.error('Failed to load session history:', error);
+            }
+        }
+
+        function renderSessionList(sessions) {
+            if (!sessions || sessions.length === 0) {
+                sessionList.innerHTML = '<p class="no-history">No history yet.</p>';
+                return;
+            }
+            sessionList.innerHTML = '';
+            sessions.forEach(session => {
+                const item = document.createElement('div');
+                item.className = 'session-item';
+                item.dataset.id = session.id;
+                item.innerHTML = `<span class="session-title">${escapeHtml(session.title)}</span>
+                                  <span class="session-meta">${session.message_count} messages</span>`;
+                item.addEventListener('click', () => loadSession(session.id));
+                sessionList.appendChild(item);
+            });
+        }
+
+        async function loadSession(sessionId) {
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}`);
+                if (!response.ok) {
+                    appendMessage('❌ Failed to load session.', 'bot');
+                    return;
+                }
+                const session = await response.json();
+
+                // Switch to a view-only mode for historical sessions
+                chatWindow.innerHTML = '';
+                (session.messages || []).forEach(msg => {
+                    appendMessage(msg.content, msg.role === 'user' ? 'user' : 'bot');
+                });
+
+                // Mark the loaded session as active so it won't be re-saved
+                currentSessionId = sessionId;
+
+                // Highlight active item in sidebar
+                document.querySelectorAll('.session-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.id === sessionId);
+                });
+            } catch (error) {
+                console.error('Failed to load session:', error);
+                appendMessage('❌ Failed to load session.', 'bot');
+            }
+        }
+
+        // New Chat: save current session, clear window, start fresh
+        newChatButton.addEventListener('click', async () => {
+            const hasMessages = chatWindow.querySelectorAll('.message').length > 0;
+            if (hasMessages) {
+                try {
+                    await fetch('/api/sessions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: currentSessionId })
+                    });
+                } catch (error) {
+                    console.error('Failed to save session:', error);
+                }
+            }
+            // Clear chat and start a new session
+            chatWindow.innerHTML = '';
+            currentSessionId = generateUUID();
+            chatInput.focus();
+            // Remove active highlight
+            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+            // Reload history list
+            await loadSessionHistory();
+        });
 
         // Send message event listeners
         sendButton.addEventListener('click', sendMessage);
@@ -80,11 +185,11 @@
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message })
+                    body: JSON.stringify({ message, session_id: currentSessionId })
                 });
 
                 const data = await response.json();
-                
+
                 // Remove loading indicator
                 loadingDiv.remove();
 
@@ -102,20 +207,30 @@
         function appendMessage(msg, sender) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
-            
+
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             bubble.textContent = msg;
-            
+
             messageDiv.appendChild(bubble);
             chatWindow.appendChild(messageDiv);
             chatWindow.scrollTop = chatWindow.scrollHeight;
         }
 
-        // Clear chat history
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#x27;');
+        }
+
+        // Clear chat (does not save session)
         clearButton.addEventListener('click', () => {
             if (confirm('Clear all messages?')) {
                 chatWindow.innerHTML = '';
+                currentSessionId = generateUUID();
             }
         });
     </script>
