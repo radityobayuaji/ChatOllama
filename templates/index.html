@@ -67,12 +67,18 @@
                     statusDiv.textContent = '🟢 Ollama Ready';
                     statusDiv.style.color = '#28a745';
                 } else {
-                    statusDiv.textContent = '🔴 Ollama Offline';
+                    const msg = data.message || 'Ollama not available';
+                    statusDiv.textContent = '🔴 ' + msg;
                     statusDiv.style.color = '#dc3545';
+                    appendMessage('⚠️ ' + msg, 'bot');
                 }
             } catch (error) {
                 statusDiv.textContent = '🔴 Ollama Not Running';
                 statusDiv.style.color = '#dc3545';
+                appendMessage(
+                    '⚠️ Cannot reach Ollama. Make sure it is running: ollama serve',
+                    'bot'
+                );
             }
         }
 
